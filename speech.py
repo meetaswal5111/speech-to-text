@@ -1,251 +1,240 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import time
 
-# Initialize session state for speech results
-if 'speech_text' not in st.session_state:
-    st.session_state.speech_text = ""
-if 'is_listening' not in st.session_state:
-    st.session_state.is_listening = False
+st.title("🎤 Speech-to-Text Converter")
+st.write("Click the buttons below to control speech recognition:")
 
-st.title("🎤 Speech-to-Text (Chrome Speech API)")
-
-# Create columns for better layout
-col1, col2, col3 = st.columns([1, 1, 2])
-
-with col1:
-    start_button = st.button("🎤 Start", type="primary")
-    
-with col2:
-    stop_button = st.button("⏹️ Stop")
-
-# Handle button states
-if start_button:
-    st.session_state.is_listening = True
-    st.session_state.speech_text = ""
-    
-if stop_button:
-    st.session_state.is_listening = False
-
-# Enhanced HTML & JavaScript with Streamlit communication
-html_code = f"""
+# Simple HTML with self-contained controls
+html_code = """
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
     <style>
-        body {{
+        body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            margin: 20px;
             background-color: #0e1117;
             color: white;
-        }}
-        .container {{
-            max-width: 600px;
-            margin: 0 auto;
-        }}
-        .status {{
-            padding: 10px;
-            border-radius: 5px;
-            margin: 10px 0;
+            padding: 20px;
+        }
+        .controls {
             text-align: center;
+            margin: 20px 0;
+        }
+        .btn {
+            background-color: #ff4b4b;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            margin: 0 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        .btn:hover {
+            background-color: #ff6b6b;
+        }
+        .btn:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+        .start-btn {
+            background-color: #00cc88;
+        }
+        .start-btn:hover {
+            background-color: #00dd99;
+        }
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
             font-weight: bold;
-        }}
-        .listening {{
-            background-color: #28a745;
-            color: white;
-        }}
-        .stopped {{
-            background-color: #6c757d;
-            color: white;
-        }}
-        .error {{
-            background-color: #dc3545;
-            color: white;
-        }}
-        #result {{
+            font-size: 18px;
+        }
+        .listening {
+            background-color: rgba(0, 204, 136, 0.2);
+            border: 2px solid #00cc88;
+            color: #00cc88;
+        }
+        .stopped {
+            background-color: rgba(108, 117, 125, 0.2);
+            border: 2px solid #6c757d;
+            color: #6c757d;
+        }
+        .error {
+            background-color: rgba(220, 53, 69, 0.2);
+            border: 2px solid #dc3545;
+            color: #dc3545;
+        }
+        #transcript {
             background-color: #1e2329;
-            border: 1px solid #30363d;
+            border: 2px solid #30363d;
             border-radius: 8px;
             padding: 20px;
             margin: 20px 0;
-            min-height: 100px;
-            font-size: 16px;
-            line-height: 1.5;
+            min-height: 150px;
+            font-size: 18px;
+            line-height: 1.6;
             white-space: pre-wrap;
             word-wrap: break-word;
-        }}
-        .interim {{
+        }
+        .interim {
             color: #888;
             font-style: italic;
-        }}
-        .final {{
+        }
+        .final {
             color: #fff;
-        }}
+        }
+        .instructions {
+            background-color: #262730;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #00cc88;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div id="status" class="status stopped">Ready to start</div>
-        <div id="result">Click Start to begin speech recognition...</div>
+    <div class="instructions">
+        <h3>📋 Instructions:</h3>
+        <ul>
+            <li>Click "Start Recording" to begin speech recognition</li>
+            <li>Speak clearly into your microphone</li>
+            <li>Click "Stop Recording" to end recognition</li>
+            <li>Allow microphone access when prompted</li>
+        </ul>
     </div>
 
-    <script type="text/javascript">
-        var recognition;
-        var isListening = {str(st.session_state.is_listening).lower()};
-        var finalTranscript = '';
-        
-        // Initialize speech recognition
-        function initRecognition() {{
-            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {{
+    <div class="controls">
+        <button id="startBtn" class="btn start-btn" onclick="startRecording()">🎤 Start Recording</button>
+        <button id="stopBtn" class="btn" onclick="stopRecording()" disabled>⏹️ Stop Recording</button>
+        <button id="clearBtn" class="btn" onclick="clearTranscript()">🗑️ Clear</button>
+    </div>
+
+    <div id="status" class="status stopped">Ready to start recording</div>
+    
+    <div id="transcript">Click "Start Recording" and begin speaking...</div>
+
+    <script>
+        let recognition;
+        let finalTranscript = '';
+        let isRecording = false;
+
+        function initSpeechRecognition() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
                 recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+                
                 recognition.continuous = true;
                 recognition.interimResults = true;
                 recognition.lang = 'en-US';
-                recognition.maxAlternatives = 1;
 
-                recognition.onstart = function() {{
-                    document.getElementById("status").className = "status listening";
-                    document.getElementById("status").innerHTML = "🎤 Listening...";
-                }};
+                recognition.onstart = function() {
+                    isRecording = true;
+                    updateUI();
+                    updateStatus('🎤 Listening... Speak now!', 'listening');
+                };
 
-                recognition.onresult = function(event) {{
-                    var interimTranscript = '';
+                recognition.onresult = function(event) {
+                    let interimTranscript = '';
                     
-                    for (var i = event.resultIndex; i < event.results.length; i++) {{
-                        var transcript = event.results[i][0].transcript;
-                        if (event.results[i].isFinal) {{
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const transcript = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
                             finalTranscript += transcript + ' ';
-                        }} else {{
+                        } else {
                             interimTranscript += transcript;
-                        }}
-                    }}
+                        }
+                    }
                     
-                    // Update display
-                    var resultDiv = document.getElementById("result");
-                    resultDiv.innerHTML = 
-                        '<span class="final">' + finalTranscript + '</span>' +
-                        '<span class="interim">' + interimTranscript + '</span>';
-                        
-                    // Send data to Streamlit (this won't work directly, but shows the concept)
-                    // In a real implementation, you'd need to use Streamlit's component communication
-                }};
+                    updateTranscript(finalTranscript, interimTranscript);
+                };
 
-                recognition.onerror = function(event) {{
-                    document.getElementById("status").className = "status error";
-                    document.getElementById("status").innerHTML = "❌ Error: " + event.error;
-                    
-                    var resultDiv = document.getElementById("result");
-                    resultDiv.innerHTML = "Error occurred: " + event.error + 
-                        "<br>Please check your microphone permissions and try again.";
-                }};
+                recognition.onerror = function(event) {
+                    console.error('Speech recognition error:', event.error);
+                    updateStatus('❌ Error: ' + event.error, 'error');
+                    isRecording = false;
+                    updateUI();
+                };
 
-                recognition.onend = function() {{
-                    document.getElementById("status").className = "status stopped";
-                    document.getElementById("status").innerHTML = "⏹️ Stopped";
-                    
-                    // Auto-restart if still supposed to be listening
-                    if (isListening) {{
-                        setTimeout(function() {{
-                            if (isListening) {{
-                                recognition.start();
-                            }}
-                        }}, 100);
-                    }}
-                }};
-            }} else {{
-                document.getElementById("result").innerHTML = 
-                    "❌ Speech recognition not supported in this browser.<br>" +
-                    "Please use Chrome, Edge, or Safari.";
-                document.getElementById("status").className = "status error";
-                document.getElementById("status").innerHTML = "❌ Not Supported";
-            }}
-        }}
+                recognition.onend = function() {
+                    isRecording = false;
+                    updateUI();
+                    updateStatus('⏹️ Recording stopped', 'stopped');
+                };
 
-        function startRecognition() {{
-            if (recognition) {{
-                isListening = true;
+            } else {
+                updateStatus('❌ Speech recognition not supported in this browser. Please use Chrome, Edge, or Safari.', 'error');
+                document.getElementById('startBtn').disabled = true;
+            }
+        }
+
+        function startRecording() {
+            if (recognition && !isRecording) {
                 finalTranscript = '';
-                document.getElementById("result").innerHTML = '';
+                updateTranscript('', '');
                 recognition.start();
-            }}
-        }}
+            }
+        }
 
-        function stopRecognition() {{
-            if (recognition) {{
-                isListening = false;
+        function stopRecording() {
+            if (recognition && isRecording) {
                 recognition.stop();
-            }}
-        }}
+            }
+        }
 
-        // Check for state changes from Streamlit
-        function checkStreamlitState() {{
-            var currentListening = {str(st.session_state.is_listening).lower()};
-            
-            if (currentListening && !isListening) {{
-                startRecognition();
-            }} else if (!currentListening && isListening) {{
-                stopRecognition();
-            }}
-            
-            isListening = currentListening;
-        }}
+        function clearTranscript() {
+            finalTranscript = '';
+            updateTranscript('', '');
+            updateStatus('📝 Transcript cleared', 'stopped');
+        }
 
-        // Initialize
-        initRecognition();
-        
-        // Check for state changes every 500ms
-        setInterval(checkStreamlitState, 500);
-        
-        // Start if needed
-        if (isListening) {{
-            startRecognition();
-        }}
+        function updateTranscript(final, interim) {
+            const transcriptDiv = document.getElementById('transcript');
+            
+            if (final === '' && interim === '') {
+                transcriptDiv.innerHTML = 'Your speech will appear here...';
+            } else {
+                transcriptDiv.innerHTML = 
+                    '<span class="final">' + final + '</span>' +
+                    '<span class="interim">' + interim + '</span>';
+            }
+            
+            // Auto-scroll to bottom
+            transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+        }
+
+        function updateStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + type;
+        }
+
+        function updateUI() {
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            
+            if (isRecording) {
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+            } else {
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initSpeechRecognition();
+        });
     </script>
 </body>
 </html>
 """
 
-# Display the speech recognition component
-components.html(html_code, height=300)
+# Display the component
+components.html(html_code, height=600)
 
-# Display current status
-if st.session_state.is_listening:
-    st.success("🎤 Listening for speech...")
-    # Auto-refresh to update the state
-    time.sleep(0.1)
-    st.rerun()
-else:
-    st.info("⏹️ Speech recognition stopped")
-
-# Instructions and tips
-with st.expander("📋 Instructions & Tips"):
-    st.markdown("""
-    **How to use:**
-    1. Click the "🎤 Start" button to begin speech recognition
-    2. Speak clearly into your microphone
-    3. Click "⏹️ Stop" to end recognition
-    
-    **Requirements:**
-    - Use Chrome, Edge, or Safari browser
-    - Allow microphone permissions when prompted
-    - Ensure you have a working microphone
-    
-    **Troubleshooting:**
-    - If you see "Speech recognition not supported", try Chrome browser
-    - If microphone access is denied, check browser permissions
-    - Refresh the page if recognition stops working
-    """)
-
-# Browser compatibility check
-st.markdown("""
----
-**Browser Compatibility:** This app works best with Chrome, Edge, and Safari. 
-Firefox has limited support for the Web Speech API.
-""")
-
-# Note about limitations
-st.warning("""
-**Note:** Due to Streamlit's component architecture, the recognized text stays within the speech recognition component. 
-For a fully integrated solution, you might need to create a custom Streamlit component or use alternative approaches.
-""")
+# Display browser compatibility info
+st.markdown("---")
+st.info("**Browser Compatibility:** Works best with Chrome, Edge, and Safari. Firefox has limited support.")
