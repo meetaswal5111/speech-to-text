@@ -9,13 +9,53 @@ html_code = """
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background-color: #0e1117;
             color: white;
             padding: 20px;
+            margin: 0;
+            min-height: 100vh;
+            box-sizing: border-box;
         }
+        
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            .btn {
+                padding: 15px 20px !important;
+                font-size: 18px !important;
+                margin: 5px !important;
+                display: block;
+                width: 100%;
+                max-width: 300px;
+                margin: 10px auto !important;
+            }
+            .controls {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+            #transcript {
+                min-height: 400px !important;
+                max-height: 600px !important;
+                font-size: 16px !important;
+                padding: 15px !important;
+            }
+            .status {
+                font-size: 16px !important;
+                padding: 12px !important;
+            }
+            .instructions {
+                font-size: 14px;
+            }
+        }
+        
         .controls {
             text-align: center;
             margin: 20px 0;
@@ -73,11 +113,14 @@ html_code = """
             border-radius: 8px;
             padding: 20px;
             margin: 20px 0;
-            min-height: 150px;
+            min-height: 300px;
+            max-height: 500px;
             font-size: 18px;
             line-height: 1.6;
             white-space: pre-wrap;
             word-wrap: break-word;
+            overflow-y: auto;
+            overflow-x: hidden;
         }
         .interim {
             color: #888;
@@ -232,8 +275,8 @@ html_code = """
 </html>
 """
 
-# Display the component
-components.html(html_code, height=600)
+# Display the component with increased height for mobile
+components.html(html_code, height=800)
 
 # Display browser compatibility info
 st.markdown("---")
